@@ -1,0 +1,66 @@
+# Here you can define all your data sets by using simple YAML syntax.
+#
+# Documentation for this file format can be found in "The Data Catalog"
+# Link: https://kedro.readthedocs.io/en/stable/05_data/01_data_catalog.html
+# https://kedro.readthedocs.io/en/stable/12_faq/01_faq.html#what-is-data-engineering-convention
+orders_train:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/orders_train.txt
+  load_args:
+    sep: ';'
+
+orders_test:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/orders_class.txt
+  load_args:
+    sep: ';'
+
+orders_test_y:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/DMC 2014_realclass.txt
+  load_args:
+    sep: ';'
+
+orders_full:
+  type: pickle.PickleDataSet
+  filepath: data/02_intermediate/orders_full.p
+
+time_features:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/time_features.p
+
+rest_features:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/rest_features.p
+
+arts_ret_p:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/arts_ret_p.p
+
+lookup_basket_occ:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_basket_occ.p
+
+lookup_basket_ret_p:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_basket_ret_p.p
+
+lookup_ret_perc_art: 
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_ret_perc_art.p
+
+lookup_tot_ord:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_tot_ord.p
+
+lookup_lift_arts:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_lift_arts.p
+
+lookup_droped_ret_arts:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/lookup_droped_ret_arts.p
+
+arts_used_ret_p:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/arts_used_ret_p.p
