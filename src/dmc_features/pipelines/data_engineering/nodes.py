@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from category_encoders.cat_boost import CatBoostEncoder
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
 def combine_dfs(orders_train, orders_test, orders_test_y):
@@ -50,23 +51,28 @@ def generate_date_features(orders):
     feature_cols_time = {}
 
     # create day features
-    feature_cols_time["DAY_ORDER"] = orders["orderDate"].dt.dayofweek
-    feature_cols_time["DAY_RECEIVED"] = orders["deliveryDate"].dt.dayofweek
+    feature_cols_time["weekdayOrdered"] = orders["orderDate"].dt.dayofweek
+    feature_cols_time["weekdayReceived"] = orders["deliveryDate"].dt.dayofweek
 
-    feature_cols_time["TIME_DELIVERY"] = (orders["deliveryDate"]-orders["orderDate"]).dt.days
-    we_del_ind = feature_cols_time["DAY_ORDER"][
-        (feature_cols_time["DAY_ORDER"]>feature_cols_time["DAY_RECEIVED"])&
-        (feature_cols_time["DAY_ORDER"] != 6)].index
-    feature_cols_time["WE_DELIVERY"] = pd.Series(data=0, index = orders.index)
-    feature_cols_time["WE_DELIVERY"].loc[we_del_ind] = 1 # package not late for those: ppl used to it
-    feature_cols_time["USER_AGE_ORDER"] = round((orders["orderDate"]-orders["dateOfBirth"]).dt.days/365)
+    feature_cols_time["durationDelivery"] = (orders["deliveryDate"]-orders["orderDate"]).dt.days
+    we_del_ind = feature_cols_time["weekdayOrdered"][
+        (feature_cols_time["weekdayOrdered"]>feature_cols_time["weekdayReceived"])&
+        (feature_cols_time["weekdayOrdered"] != 6)].index
+    feature_cols_time["weDelivery"] = pd.Series(data=0, index = orders.index)
+    feature_cols_time["weDelivery"].loc[we_del_ind] = 1 # package not late for those: ppl used to it
+    user_age = round((orders["orderDate"]-orders["dateOfBirth"]).dt.days/365)
+    user_age_imp = pd.Series(0, index = user_age.index)
+    user_age_imp.loc[user_age[user_age.isna()].index] = 1
+    user_age = user_age.fillna(user_age.mean()).astype(np.int32)
+    feature_cols_time["UserAgeOrder"] = user_age
+    feature_cols_time["userAgeImp"] = user_age_imp
 
     # binary == 1 if account was made on oldest date -> system import
     old_sys_inc = orders["creationDate"][orders["creationDate"]==min(orders["creationDate"])].index
-    feature_cols_time["ACC_OLD_SYS"] = pd.Series(data=0, index = orders.index)
-    feature_cols_time["ACC_OLD_SYS"].loc[old_sys_inc] = 1
+    feature_cols_time["accOldSys"] = pd.Series(data=0, index = orders.index)
+    feature_cols_time["accOldSys"].loc[old_sys_inc] = 1
     # ~140 freshly made for order
-    feature_cols_time["ACC_AGE_ORDER"] = (orders["orderDate"]-orders["creationDate"]).dt.days
+    feature_cols_time["accAgeAtOrder"] = (orders["orderDate"]-orders["creationDate"]).dt.days
     return feature_cols_time
 
 
@@ -287,18 +293,66 @@ def subframes_budgets(train_arts, test_arts, budget:int):
     return budgets
 
 
+def subframes_budgets(train_arts, test_arts, budget):
+    budgets = list(range(1, budget+1))
+    
+    arts = train_arts.value_counts().index
+    iterations = int(len(arts)/budget)
+    remainder = len(arts) - iterations*budget
+    # print(budgets, arts, iterations, remainder)
+    train_enc = pd.Series(data=budgets*iterations +  budgets[:remainder], index = arts)
+    
+    rest = test_arts[~test_arts.isin(train_arts)].value_counts().index
+    iterations = int(len(rest)/budget)
+    remainder = len(rest) - iterations*budget
+    rest_enc = pd.Series(data=budgets*iterations +  budgets[:remainder], index = rest)
+    enc = pd.concat([train_enc, rest_enc])
+    all_arts = pd.concat([train_arts, test_arts])
+    budgets = all_arts.apply(lambda x: enc.loc[x])
+    return budgets
+
+
 def generate_feature_frame(orders, time_features, other_features, arts_ret_p, parameters):
-    ret_p_cols = pd.Series(arts_ret_p.keys())
-    # non_imp_inc = {key: arts_ret_p[key].dropna().index for key in arts_ret_p.keys()}
+    coldict = parameters["coldict"]
+    cat_pass = coldict["cat_pass"]
+    cat_catboost = coldict["cat_catboost"]
+    cont = coldict["cont"]
+    output_col = coldict["output_col"]
+
     features = pd.DataFrame({**other_features, **time_features})
     orders_features = pd.merge(orders, features, right_index = True, left_index = True)
-    mean_multi = orders_features[(orders_features["val_set"]==0)&(orders_features["basketNArts"]>1)].mean()
-    mean_single = orders_features[(orders_features["val_set"]==0)&(orders_features["basketNArts"]==1)].mean()
-    ret_p_frame = pd.DataFrame(arts_ret_p)
-    full_frame = pd.merge(orders_features, ret_p_frame, right_index = True, left_index = True, how="left")
-    full_frame[full_frame["basketNArts"]==1][ret_p_cols].fillna(mean_single, inplace=True)
-    full_frame[full_frame["basketNArts"]>1][ret_p_cols].fillna(mean_multi, inplace=True)
-    
 
-    return full_frame
+    train = orders_features[orders_features["val_set"]==0]
+    test = orders_features[orders_features["val_set"]==1]
+    budgets = subframes_budgets(train["itemID"], test["itemID"], parameters["budgets"])
+
+    # delete unused features and add budget (data splits by articles)
+    orders_features = orders_features[cat_pass+cat_catboost+cont+[output_col]+["val_set"]]
+    orders_features.loc[:, cat_pass+cat_catboost] = orders_features[cat_pass+cat_catboost].astype("category")
+    orders_features["budgets"] = budgets
+
+    # create dataframe for joint_ret_p, including imputation for single + multi basket + indicator columns
+    ret_p_cols = pd.Series(arts_ret_p.keys())
+    non_imp_inc = {key: arts_ret_p[key].dropna().index for key in ret_p_cols}
+    multi_baskets = orders_features[orders_features["basketNArts"]>1]
+    single_baskets = orders_features[orders_features["basketNArts"]==1]
+    multi_mean = multi_baskets[multi_baskets["val_set"]==0][output_col].mean()
+    single_mean = single_baskets[single_baskets["val_set"]==0][output_col].mean()
+    # columns to indicate impution
+    imp_frame = pd.DataFrame(index = orders.index, columns = ret_p_cols+"_Imp").fillna(1)
+    ret_p_frame = pd.merge(pd.DataFrame(arts_ret_p, index = orders.index), imp_frame, right_index = True, left_index = True)
+    print(ret_p_frame.shape[0])
     
+    for col in ret_p_cols:  # set non-imputed columns to zero
+        ret_p_frame.loc[non_imp_inc[col], col+"_Imp"] = 0
+        ret_p_frame.loc[multi_baskets.index, col] = ret_p_frame.loc[multi_baskets.index, col].fillna(multi_mean)
+        ret_p_frame.loc[single_baskets.index, col] = ret_p_frame.loc[single_baskets.index, col].fillna(single_mean)
+
+
+    catboost_enc = CatBoostEncoder()
+    catboost_enc.fit(train[cat_catboost], train[output_col])
+    catcoded_cols = catboost_enc.transform(orders_features[cat_catboost]).add_suffix("Catboost")
+
+    orders_features = pd.merge(orders_features, catcoded_cols, right_index = True, left_index = True)
+    orders_features = pd.merge(orders_features, ret_p_frame, right_index = True, left_index = True)
+    return orders_features

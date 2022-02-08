@@ -64,3 +64,7 @@ lookup_droped_ret_arts:
 arts_used_ret_p:
   type: pickle.PickleDataSet
   filepath: data/03_primary/arts_used_ret_p.p
+
+orders_features:
+  type: pickle.PickleDataSet
+  filepath: data/03_primary/orders_features.p

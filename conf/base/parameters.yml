@@ -9,8 +9,9 @@ ordnr_col: 'basketID'
 artnr_col: 'itemID'
 budgets: 10
 coldict:
-  cat_pass: ['DAY_ORDER', 'DAY_RECEIVED', 'WE_DELIVERY', 'ACC_OLD_SYS', "color", "size"]
-  cat_catboost: ["manufacturerID", "salutation", "state", 'item_color_cat', 'item_size_cat'] # double: one normal + one catboost col; seperate for arguments -> ["manufacturerID", "salutation", "state"] + ['item_color_cat', 'item_size_cat']
-  cont_pass: ['discount', 'basket_price', 'basketNArts', 'TIME_DELIVERY', , 'ACC_AGE_ORDER']
-  retp_imp: ['min_5_top_5_sqrt_w_lift', 'min_5_top_5_sqrt_w_conf']
-  cont_impute: ['USER_AGE_ORDER']
+  cat_pass: ['weekdayOrdered', 'weekdayReceived', 'weDelivery', 'accOldSys', "color", "size", "userAgeImp"]
+  # double: one normal + one catboost col; seperate for arguments -> ["manufacturerID", "salutation", "state"] + ['item_color_cat', 'item_size_cat']
+  cat_catboost: ["manufacturerID", "salutation", "state", 'item_color_cat', 'item_size_cat', "itemID"] 
+  cont: ['discount', 'basket_price', 'basketNArts', 'durationDelivery', 'accAgeAtOrder', UserAgeOrder]
+  # retp_imp: ['min_5_top_5_sqrt_w_lift', 'min_5_top_5_sqrt_w_conf']
+  output_col: 'returnShipment'

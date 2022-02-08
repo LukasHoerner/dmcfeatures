@@ -33,8 +33,8 @@ def create_pipeline(**kwargs):
             ),
             node(
                 func=generate_feature_frame,
-                inputs= ["orders_full", "time_features", "rest_features", "ret_p_feat", "parameters"],
-                outputs=["orders_features"],
+                inputs= ["orders_full", "time_features", "rest_features", "arts_ret_p", "parameters"],
+                outputs="orders_features",
                 name="feature_frame",
             ),
         ]
