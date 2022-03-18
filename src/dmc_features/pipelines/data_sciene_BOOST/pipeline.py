@@ -1,17 +1,22 @@
 from kedro.pipeline import Pipeline, node
 
-# from .nodes import firstfunc
+from .nodes import find_incumbent, test_params
 
 
 def create_pipeline(**kwargs):
     return Pipeline(
         [
-            #node(
-            #    func= repair_cols,
-            #    inputs= ["orders", "orders_positions", "returns_positions", "returns"],
-            #    outputs= ["orders_colcheck", "orders_positions_colcheck",
-            #     "returns_positions_colcheck", "returns_colcheck"],
-            #    name="repair_cols",
-            #)
+            node(
+               func= find_incumbent,
+               inputs= ["orders_features", "parameters", "enc_cols"],
+               outputs= "resultdict",
+               name="find_incumbent",
+            ),
+            node(
+               func= test_params,
+               inputs= ["orders_features" , "resultdict",  "parameters"],
+               outputs= "models_catboost",
+               name="test_params",
+            )
         ]
     )

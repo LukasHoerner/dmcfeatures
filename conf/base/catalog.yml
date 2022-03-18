@@ -33,38 +33,62 @@ rest_features:
   type: pickle.PickleDataSet
   filepath: data/03_primary/rest_features.p
 
-arts_ret_p:
+enc_cols:
   type: pickle.PickleDataSet
-  filepath: data/03_primary/arts_ret_p.p
+  filepath: data/03_primary/enc_cols.p
 
-lookup_basket_occ:
+enc_frame:
   type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_basket_occ.p
+  filepath: data/03_primary/enc_frame.p
 
-lookup_basket_ret_p:
+target_features:
   type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_basket_ret_p.p
-
-lookup_ret_perc_art: 
-  type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_ret_perc_art.p
-
-lookup_tot_ord:
-  type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_tot_ord.p
-
-lookup_lift_arts:
-  type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_lift_arts.p
-
-lookup_droped_ret_arts:
-  type: pickle.PickleDataSet
-  filepath: data/03_primary/lookup_droped_ret_arts.p
-
-arts_used_ret_p:
-  type: pickle.PickleDataSet
-  filepath: data/03_primary/arts_used_ret_p.p
+  filepath: data/03_primary/target_feat.p
 
 orders_features:
   type: pickle.PickleDataSet
-  filepath: data/03_primary/orders_features.p
+  filepath: data/04_feature/orders_features.p
+
+models_catboost:
+  type: pickle.PickleDataSet
+  filepath: data/06_models/models_catboost.p
+
+resultdict:
+  type: pickle.PickleDataSet
+  filepath: data/07_model_output/resultdict.p
+  
+results_cols:
+  type: pickle.PickleDataSet
+  filepath: data/07_model_output/results_cols.p
+
+# arts_ret_p:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/arts_ret_p.p
+
+# lookup_basket_occ:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_basket_occ.p
+
+# lookup_basket_ret_p:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_basket_ret_p.p
+
+# lookup_ret_perc_art: 
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_ret_perc_art.p
+
+# lookup_tot_ord:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_tot_ord.p
+
+# lookup_lift_arts:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_lift_arts.p
+
+# lookup_droped_ret_arts:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/lookup_droped_ret_arts.p
+
+# arts_used_ret_p:
+#   type: pickle.PickleDataSet
+#   filepath: data/03_primary/arts_used_ret_p.p

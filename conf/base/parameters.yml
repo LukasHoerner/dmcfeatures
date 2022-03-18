@@ -1,17 +1,36 @@
-ret_p_hyperparams:
-  drop_double_returns: False
-  min_joint_baskets: [5] # [0, 5, 10, 15]
-  weights: ["sqrt_w"] # [False, "lin_w", "sqrt_w"]
-  top_freq_arts: [5] # [False, 3, 5, 10, "var_5"]
 random_state: 42
-ret_col: 'returnShipment'
-ordnr_col: 'basketID'
+target_col: 'returnShipment'
+meta_col: 'basketID' # previous: ordnr_col
 artnr_col: 'itemID'
+
+ret_p_hyperparams:
+  N_min: [10, 20, 50, 100]
+  weights: [True, False]
+  sorting_type: ["lift", "conf"]
+  basket_max: [1, 3, 5, 100]
+
 budgets: 10
 coldict:
+  ord_encode: ["color", "size", "customerID", "salutation", "state", "itemID", "manufacturerID"] # "item_color_cat", "item_size_cat",
+  # cat_passnoenc: ['weekdayOrdered', 'weekdayReceived', 'weDelivery', 'accOldSys', 'userAgeImp']
   cat_pass: ['weekdayOrdered', 'weekdayReceived', 'weDelivery', 'accOldSys', "color", "size", "userAgeImp"]
   # double: one normal + one catboost col; seperate for arguments -> ["manufacturerID", "salutation", "state"] + ['item_color_cat', 'item_size_cat']
-  cat_catboost: ["manufacturerID", "salutation", "state", 'item_color_cat', 'item_size_cat', "itemID"] 
-  cont: ['discount', 'basket_price', 'basketNArts', 'durationDelivery', 'accAgeAtOrder', UserAgeOrder]
+  cat_catboost: ["customerID", "manufacturerID", "salutation", "state", 'monthOrdered', "itemID"] # 'item_color_cat', 'item_size_cat',
+  cont: ['price', 'discount', 'basket_price', 'basketNArts', 'durationDelivery', 'accAgeAtOrder', 'UserAgeOrder']
   # retp_imp: ['min_5_top_5_sqrt_w_lift', 'min_5_top_5_sqrt_w_conf']
-  output_col: 'returnShipment'
+
+bohb_catboost:
+  description: "bohb_catboost"
+  min_budget: 9
+  max_budget: 243
+  n_iterations: 5
+  n_workers: 4
+
+bohb_pytorch:
+  description: "bohb_pytorch"
+  min_budget: 2
+  max_budget: 30
+  n_iterations: 8
+  n_workers: 2
+
+patience_torch: 3

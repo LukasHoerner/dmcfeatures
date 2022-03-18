@@ -1,4 +1,7 @@
+argparse==1.4.0 
 black==21.5b1
+category-encoders==2.3.0
+ConfigSpace==0.4.21
 flake8>=3.7.9, <4.0
 hpbandster==0.7.4
 ipython~=7.10
@@ -14,4 +17,6 @@ pandas==1.4
 pytest-cov~=3.0
 pytest-mock>=1.7.1, <2.0
 pytest~=6.2
+torch==1.11.0
+torchmetrics==0.7.2
 wheel>=0.35, <0.37
