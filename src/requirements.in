@@ -1,5 +1,6 @@
 argparse==1.4.0 
 black==21.5b1
+catboost==1.0.5
 category-encoders==2.3.0
 ConfigSpace==0.4.21
 flake8>=3.7.9, <4.0
@@ -11,6 +12,7 @@ jupyter_client>=5.1, <7.0
 jupyterlab~=3.0
 kedro==0.17.6
 kedro-telemetry~=0.1.0
+kedro-viz==4.3.1
 nbstripout~=0.4
 numpy==1.22.1
 pandas==1.4

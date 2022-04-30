@@ -60,6 +60,7 @@ class CatBoostWorker(Worker):
         It is trained on the MNIST dataset.
         The input parameter "config" (dictionary) contains the sampled configurations passed by the bohb optimizer
         """
+        log =self.logger
         cat_features=self.categorical_features_indices
         if self.experiment == "baseline":
             cat_features = np.append(cat_features, len(cat_features))
@@ -119,8 +120,22 @@ class CatBoostWorker(Worker):
         model.fit(train_pool, eval_set=validate_pool)
         y_pred = model.predict(X_test)
         y_pred_multi = model.predict(X_test.loc[self.test_multi_inc])
-        MCC_test= matthews_corrcoef(y_test, y_pred)     
-        # log.info('MCC: {} with col = {}, params L2 {}, depth {}, LR={}'.format(MCC_test, config['l2_leaf_reg'], config['depth'], config['lr']))
+        MCC_test= matthews_corrcoef(y_test, y_pred)
+
+        metricsdict = {"MCC_test": MCC_test,
+                    'cols': used_retp_col,
+                    'F1_test': f1_score(y_test, y_pred),
+                    'Recall_test': recall_score(y_test, y_pred),
+                    'Prec_test': precision_score(y_test, y_pred),
+                    'MCC_test_multiarts': matthews_corrcoef(y_test_multi, y_pred_multi),
+                    'Recall_test_multiarts': recall_score(y_test_multi, y_pred_multi),
+                    'Prec_test_multiarts': precision_score(y_test_multi, y_pred_multi),
+                    'depth': config['depth'],
+                    'l2_leaf_reg': config['l2_leaf_reg'],
+                    'learning_rate': config['lr'],
+                    "X_train_shape": X_train.shape[0],
+                    "X_test_shape": X_test.shape[0]}
+        log.info(metricsdict)
         if search_run:
             return ({
                     'loss': 1-MCC_test, # remember: HpBandSter always minimizes!
@@ -136,7 +151,7 @@ class CatBoostWorker(Worker):
                     'learning_rate': config['lr'],}
                     })
         else:
-            return model
+            return [model, metricsdict]
             # log.info({"MCC_test": MCC_test,
             #     'cols': used_retp_col,
             #     'F1_test': f1_score(y_test, y_pred),
@@ -305,6 +320,7 @@ def test_params(data, resultdict, parameters):
     cont_cols = cols_dict["cont"]
     outpu_col = parameters["target_col"]
     best_models = {}
+    best_metrics = {}
     for experiment in resultdict.keys():
         results = resultdict[experiment]
         config = results["id2config"][results["incumbent"]]["config"]
@@ -320,7 +336,9 @@ def test_params(data, resultdict, parameters):
             used_retp_col = ["itemID"]
         worker = CatBoostWorker(run_id=experiment, data=data,cat_cols=cat_cols,
             cont_cols=cont_cols, retp_cols=used_retp_col, output_col=outpu_col, experiment=experiment)
-        model = worker.compute(config, search_run=False)
+        [model, metricsdict] = worker.compute(config, search_run=False)
+        for key in parameters["metrics"]:
+            best_metrics[experiment + "_" + key] = metricsdict[key]
         best_models[experiment] = model
 
-    return best_models
+    return [best_metrics, best_models]

@@ -61,6 +61,14 @@ results_cols:
   type: pickle.PickleDataSet
   filepath: data/07_model_output/results_cols.p
 
+metrics_catboost:
+  type: tracking.MetricsDataSet
+  filepath: data/09_tracking/metrics_catboost.json
+
+metrics_pytorch:
+  type: tracking.MetricsDataSet
+  filepath: data/09_tracking/metrics_pytorch.json
+
 # arts_ret_p:
 #   type: pickle.PickleDataSet
 #   filepath: data/03_primary/arts_ret_p.p

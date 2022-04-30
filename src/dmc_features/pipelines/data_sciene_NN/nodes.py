@@ -130,7 +130,7 @@ class PyTorchWorker(Worker):
 
         # dataloader = DataLoader(train_dataset, batchsize, shuffle=True) used the code from example
 
-    def compute(self, config, budget, working_directory, *args, **kwargs):
+    def compute(self, config, budget, working_directory, search_run=True, *args, **kwargs):
         """
         Simple example for a compute function using a feed forward network.
         It is trained on the MNIST dataset.
@@ -192,11 +192,16 @@ class PyTorchWorker(Worker):
 
         # initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        layers_size = config['first_layer_sz']
-        lin_layer_sizes = []
-        for i in range(config['no_layers']):
-            lin_layer_sizes += [int(layers_size)]
-            layers_size -= layers_size/2
+        # layers_size = config['first_layer_sz']
+
+        if config['no_layers'] == 2:
+            lin_layer_sizes = [200, 100]
+        elif config['no_layers'] == 1:
+            lin_layer_sizes = [100]
+
+        # for i in range(config['no_layers']):
+        #     lin_layer_sizes += [int(layers_size)]
+        #     layers_size -= layers_size/2
         dropouts = [config['lin_layer_dropout']] * config['no_layers']
 
         model = FeedForwardNN(emb_dims, no_of_cont=len(cont_inc), lin_layer_sizes=lin_layer_sizes,
@@ -204,8 +209,8 @@ class PyTorchWorker(Worker):
                             lin_layer_dropouts=dropouts)
         model.to(device)
         criterion = nn.BCEWithLogitsLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay= config['wd'])
-
+        optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay= config['wd'], eps=1e-05) # eps to fastai default
+        # print(model)
         # init metrics
         metrics = MetricCollection([MatthewsCorrCoef(num_classes=2), F1Score(), Precision(), Recall()])
         train_metrics = metrics.clone(prefix='train_')
@@ -248,8 +253,10 @@ class PyTorchWorker(Worker):
             valid_metrics.reset()
 
 
-        log.info({'mcc':prev_mcc,
-                'resdict': train_dict[best_epoch],
+        metricsdict = {'mcc':prev_mcc,
+                'F1_test': train_dict[best_epoch]["val_F1Score"],
+                'Recall_test': train_dict[best_epoch]["val_Recall"],
+                'Prec_test': train_dict[best_epoch]["val_Precision"],
                 'data': X_train.shape,
                 'epoch': best_epoch,
                 'cols': used_retp_col,
@@ -258,38 +265,26 @@ class PyTorchWorker(Worker):
                 "emb_dropout": config["emb_dropout"],
                 "lin_layer_dropout": config['lin_layer_dropout'],
                 "no_layers": config["no_layers"],
-                "first_layer_sz": config["first_layer_sz"],
-                'no params': model.number_of_parameters()
-                })
-        
-        return ({
-                'loss': 1-prev_mcc, # remember: HpBandSter always minimizes!
-                'info': {'best_metrics': prev_mcc,
-                        'best_epoch': best_epoch,
-                        'cols': used_retp_col,
-                        "lr": config["lr"],
-                        "wd": config["wd"],
-                        "emb_dropout": config["emb_dropout"],
-                        "lin_layer_dropout": config['lin_layer_dropout'],
-                        "no_layers": config["no_layers"],
-                        "first_layer_sz": config["first_layer_sz"],
-                        'number of parameters': model.number_of_parameters(),
-                        }
-                })
-
-    # def evaluate_metrics(self, model, data_loader):
-    #         model.eval()
-    #         cohen_kappas=[]
-    #         with torch.no_grad():
-    #                 for y, cont_x, cat_x in data_loader:
-    #                         output = torch.sigmoid(model(cont_x, cat_x))
-    #                         pred = torch.round(output)
-    #                         #test_loss += F.nll_loss(output, target, reduction='sum').item() # sum up batch loss
-    #                         cohen_kappa = cohen_kappa_score(y, pred)
-    #                         cohen_kappas += [cohen_kappa]
-    #         #import pdb; pdb.set_trace()
-    #         cohen_kappa = sum(cohen_kappas)/len(cohen_kappas)
-    #         return(cohen_kappa)
+                # "first_layer_sz": config["first_layer_sz"],
+                }
+        log.info(metricsdict)
+        if search_run:
+            return ({
+                    'loss': 1-prev_mcc, # remember: HpBandSter always minimizes!
+                    'info': {'best_metrics': prev_mcc,
+                            'best_epoch': best_epoch,
+                            'cols': used_retp_col,
+                            "lr": config["lr"],
+                            "wd": config["wd"],
+                            "emb_dropout": config["emb_dropout"],
+                            "lin_layer_dropout": config['lin_layer_dropout'],
+                            "no_layers": config["no_layers"],
+                            # "first_layer_sz": config["first_layer_sz"],
+                            'number of parameters': model.number_of_parameters(),
+                            }
+                    })
+        else:
+            return [model, metricsdict]
 
 
     @staticmethod
@@ -307,18 +302,19 @@ class PyTorchWorker(Worker):
             basket_max = ret_p_hyperparams["basket_max"]
 
             cs = CS.ConfigurationSpace()
-            wd = CSH.UniformFloatHyperparameter('wd', lower=1e-3, upper=5e-1, default_value=1e-1)
-            lr = CSH.UniformFloatHyperparameter('lr', lower=1e-8, upper=1e-2, default_value=1e-4, log=True)
+            wd = CSH.UniformFloatHyperparameter('wd', lower=1e-2, upper=3e-1, default_value=1e-1)
+            lr = CSH.UniformFloatHyperparameter('lr', lower=1e-5, upper=1e-3, default_value=1e-4, log=True)
             lin_layer_dropout = CSH.UniformFloatHyperparameter('lin_layer_dropout', lower=0.0, upper=0.1, default_value=0.01, log=False)
             emb_dropout = CSH.UniformFloatHyperparameter('emb_dropout', lower=0.0, upper=0.1, default_value=0.01, log=False)
             # For demonstration purposes, we add different optimizers as categorical hyperparameters.
 
             cs.add_hyperparameters([wd, lr, lin_layer_dropout, emb_dropout])
 
-            no_layers =  CSH.UniformIntegerHyperparameter('no_layers', lower=1, upper=3, default_value=2)
-            first_layer_sz =  CSH.UniformIntegerHyperparameter('first_layer_sz', lower=100, upper=500, default_value=300)
+            no_layers =  CSH.UniformIntegerHyperparameter('no_layers', lower=1, upper=2, default_value=2)
+            # first_layer_sz =  CSH.UniformIntegerHyperparameter('first_layer_sz', lower=100, upper=500, default_value=300)
 
-            cs.add_hyperparameters([no_layers, first_layer_sz])
+            # cs.add_hyperparameters([no_layers, first_layer_sz])
+            cs.add_hyperparameter(no_layers)
 
             # Hyperparameters used for picking the joint_ret_p
             if experiment == "BetaLoo2D":
@@ -384,7 +380,8 @@ class FeedForwardNN(nn.Module):
         no_of_embs = sum([y for x, y in emb_dims])
         self.no_of_embs = no_of_embs
         self.no_of_cont = no_of_cont
-
+        # if len(lin_layer_sizes) == 0:
+        #     lin_layer_sizes = [2]
         # Linear Layers
         first_lin_layer = nn.Linear(
             self.no_of_embs + self.no_of_cont, lin_layer_sizes[0]
@@ -479,7 +476,7 @@ def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
     # output_col = parameters["ret_col"]
     bohb_args = parameters["bohb_pytorch"]
     resultdict = {}
-    experiments = {# "baseline": [parameters["artnr_col"]],
+    experiments = {"baseline": [parameters["artnr_col"]],
                     "mEstimate": enc_cols["m"] + enc_cols["m_smooth"] + enc_cols['1D'] + enc_cols['1D_base'],
                     "BetaLoo2D": enc_cols["2D"]}
 
