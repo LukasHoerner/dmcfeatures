@@ -21,6 +21,11 @@ import ConfigSpace.hyperparameters as CSH
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
+
 class TabularDataset(Dataset):
     def __init__(self, X, y, cat_feat=[], cont_feat=[]):
         """
@@ -130,15 +135,18 @@ class PyTorchWorker(Worker):
 
         # dataloader = DataLoader(train_dataset, batchsize, shuffle=True) used the code from example
 
-    def compute(self, config, budget, working_directory, search_run=True, *args, **kwargs):
+    def compute(self, config, budget,search_run=True, working_directory=None,  *args, **kwargs):
         """
         Simple example for a compute function using a feed forward network.
         It is trained on the MNIST dataset.
         The input parameter "config" (dictionary) contains the sampled configurations passed by the bohb optimizer
         """
+        torch.use_deterministic_algorithms(True)
+        g = torch.Generator()
+        g.manual_seed(self.random_state)
+        torch.manual_seed(self.random_state)
+        np.random.seed(self.random_state)
         
-
-
         log=self.logger
         cat_inc=self.categorical_features_indices
 
@@ -163,32 +171,25 @@ class PyTorchWorker(Worker):
             X_train = self.train[self.cat_cols+self.cont_cols+ used_retp_col]
             X_test = self.test[self.cat_cols+self.cont_cols+ used_retp_col]
         print(used_retp_col)
-        # train_budget = self.budget_dict["train"][int(budget)]
-        # test_budget = self.budget_dict["test"][int(budget)]
-        # X_train = X_train.loc[train_budget]
-        # X_test = X_test.loc[test_budget]
 
         y_train = self.train[self.output_col].to_numpy()
         y_test = self.test[self.output_col].to_numpy()
-        # y_train = y_train[train_budget.to_list()]
-        # y_test = y_test[test_budget.to_list()]
 
         X_train = X_train.to_numpy()
         X_test = X_test.to_numpy()
-        print(budget, X_train.shape, X_test.shape)
 
         cont_inc = np.array(range(len(cat_inc), X_train.shape[1]))
         cat_dims = [len(np.unique(X_train[:, inc])) for inc in cat_inc]
-        # emb_dims = [(x, min(200, (x + 1) // 2)) for x in cat_dims] # current rule of thumb from fastai library
-        emb_dims = [(x + 1, min(600, round(1.6 * x **0.56))) for x in cat_dims]
+        emb_dims = [(x + 1, min(600, round(1.6 * x **0.56))) for x in cat_dims] # current rule of thumb from fastai library
         
         # create datasets and dataloader
         batch_size = 1024
         train_dataset = TabularDataset(X_train, y_train, cat_inc, cont_inc)
         test_dataset = TabularDataset(X_test, y_test, cat_inc, cont_inc)
         
-        train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size)
+
+        train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, worker_init_fn=seed_worker,generator=g)
+        test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, worker_init_fn=seed_worker,generator=g)
 
         # initialize model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -199,18 +200,16 @@ class PyTorchWorker(Worker):
         elif config['no_layers'] == 1:
             lin_layer_sizes = [100]
 
-        # for i in range(config['no_layers']):
-        #     lin_layer_sizes += [int(layers_size)]
-        #     layers_size -= layers_size/2
         dropouts = [config['lin_layer_dropout']] * config['no_layers']
 
         model = FeedForwardNN(emb_dims, no_of_cont=len(cont_inc), lin_layer_sizes=lin_layer_sizes,
                             output_size=1, emb_dropout=config['emb_dropout'], # drop emd_dropout? -> or add 0
                             lin_layer_dropouts=dropouts)
-        model.to(device)
+        
         criterion = nn.BCEWithLogitsLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay= config['wd'], eps=1e-05) # eps to fastai default
-        # print(model)
+        model.to(device)
+
         # init metrics
         metrics = MetricCollection([MatthewsCorrCoef(num_classes=2), F1Score(), Precision(), Recall()])
         train_metrics = metrics.clone(prefix='train_')
@@ -247,12 +246,17 @@ class PyTorchWorker(Worker):
                 patience = self.patience
             else:
                 patience -= 1
+                if epoch == 0:
+                    train_dict[epoch] = epoch_val_metrics
                 if patience == 0:
                     break
             train_metrics.reset()
             valid_metrics.reset()
 
-
+        if not search_run:
+            best_epoch = epoch
+            train_dict[epoch] = epoch_val_metrics
+            prev_mcc = epoch_val_metrics["val_MatthewsCorrCoef"]
         metricsdict = {'mcc':prev_mcc,
                 'F1_test': train_dict[best_epoch]["val_F1Score"],
                 'Recall_test': train_dict[best_epoch]["val_Recall"],
@@ -301,7 +305,7 @@ class PyTorchWorker(Worker):
             sorting_type = ret_p_hyperparams["sorting_type"]
             basket_max = ret_p_hyperparams["basket_max"]
 
-            cs = CS.ConfigurationSpace()
+            cs = CS.ConfigurationSpace(seed=parameters["random_state"])
             wd = CSH.UniformFloatHyperparameter('wd', lower=1e-2, upper=3e-1, default_value=1e-1)
             lr = CSH.UniformFloatHyperparameter('lr', lower=1e-5, upper=1e-3, default_value=1e-4, log=True)
             lin_layer_dropout = CSH.UniformFloatHyperparameter('lin_layer_dropout', lower=0.0, upper=0.1, default_value=0.01, log=False)
@@ -444,15 +448,8 @@ class FeedForwardNN(nn.Module):
     def number_of_parameters(self):
         return(sum(p.numel() for p in self.parameters() if p.requires_grad))
 
-
-def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
-    logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger(__name__)
-    # use test-validation set
-    data = data['train_val']
-
-    # new data: encode categorical variables
-    ord_encode =  parameters["coldict"]["ord_encode"]
+def transform_input(data, parameters):
+    ord_encode =  parameters["coldict"]["ord_encode"]    
     train = data[data["val_set"]==0]
     test = data[data["val_set"]==1]
     enc = OrdinalEncoder(handle_unknown= "use_encoded_value", unknown_value=np.nan) # )
@@ -465,6 +462,17 @@ def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
         data[column].fillna(max(data[column]), inplace=True)
     catenc= parameters["coldict"]["cat_pass"] + parameters["coldict"]["cat_catboost"]
     data.loc[:, catenc] = data[catenc].apply(lambda x: pd.to_numeric(x))
+    return data
+
+
+def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
+    np.random.seed(parameters["random_state"])
+    logging.basicConfig(level=logging.DEBUG)
+    log = logging.getLogger(__name__)
+    # use test-validation set
+    data = data['train_val']
+    # new data: encode categorical variables
+    data = transform_input(data, parameters)
     # oversamp_inc = None
     # if parameters["imbalance"] == True:
     #     oversamp_inc = round((1 - data["val_set"].max()*parameters["val_test_pct"])/(parameters["val_test_pct"]) * data[data["val_set"]==data["val_set"].max()].shape[0])
@@ -527,3 +535,39 @@ def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
         resultdict[experiment] = {"res": res, "id2config": id2config, "incumbent": incumbent, "all_runs": all_runs}
 
     return resultdict
+
+
+def test_params(data, resultdict, parameters):
+    data = data['train_test']
+    data = transform_input(data, parameters)
+    ret_p_hyperparams = parameters["ret_p_hyperparams"] # necessary because HpBandSTer uses an integer to pick a value from the hyperparamlist
+    best_models = {}
+    best_metrics = {}
+    for experiment in resultdict.keys():
+        results = resultdict[experiment]
+        config = results["id2config"][results["incumbent"]]["config"]
+        res = results["res"]
+        epochs = res.get_runs_by_id(res.get_incumbent_id())[-1]["info"]["best_epoch"] # get best epoch from incumbent run (early stopping)
+        if experiment == "BetaLoo2D":
+            n_min = ret_p_hyperparams["N_min"][config['n_min']-1]
+            max_basket = ret_p_hyperparams["basket_max"][config['max_basket']-1]
+            weight = config['weight']
+            sort = config['sort']
+            used_retp_col = [str(str(n_min) + "_" + str(max_basket) + "_" + str(weight) + "_" + sort)]
+        elif experiment == "mEstimate":
+            if config['smooth']:
+                used_retp_col = [str(ret_p_hyperparams["N_min"][config['m']-1]) + "_" + config['smooth']]
+            else:
+                used_retp_col = [ret_p_hyperparams["N_min"][config['m']-1]]
+        else:
+            used_retp_col = [parameters["artnr_col"]]
+        # worker = CatBoostWorker(run_id=experiment, data=data,cat_cols=cat_cols,cont_cols=cont_cols, retp_cols=used_retp_col, output_col="y",
+        # experiment=experiment, random_state=parameters["random_state"], oversamp_inc=oversamp_inc)
+        worker = PyTorchWorker(run_id=experiment, data=data,parameters=parameters, retp_cols=used_retp_col, output_col=parameters["target_col"], experiment=experiment)
+        [model, metricsdict] = worker.compute(config, budget = epochs, search_run=False)
+        for key in parameters["metrics_pytorch"]:
+            if key in metricsdict.keys():
+                best_metrics[experiment + "_" + key] = metricsdict[key]
+        best_models[experiment] = model
+
+    return [best_metrics, best_models]

@@ -24,7 +24,7 @@ bohb_catboost:
   min_budget: 9
   max_budget: 243
   n_iterations: 5
-  n_workers: 4
+  n_workers: 1
 
 metrics: ['MCC_test', 'F1_test', 'Recall_test', 'Prec_test', 'MCC_test_multiarts', 'Recall_test_multiarts', 'Prec_test_multiarts']
 
@@ -32,8 +32,8 @@ bohb_pytorch:
   description: "bohb_pytorch"
   min_budget: 2
   max_budget: 30
-  n_iterations: 10
-  n_workers: 2
+  n_iterations: 1
+  n_workers: 1
 
 patience_torch: 3
 metrics_pytorch: ['MCC_test', 'F1_test', 'Recall_test', 'Prec_test', 'epoch']

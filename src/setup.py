@@ -3,8 +3,6 @@ from setuptools import find_packages, setup
 entry_point = (
     "dmcfeatures = dmc_features.__main__:main"
 )
-
-
 # get the dependencies and installs
 with open("requirements.txt", encoding="utf-8") as f:
     # Make sure we strip all comments and options (e.g "--extra-index-url")

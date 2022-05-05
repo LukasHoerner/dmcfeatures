@@ -54,7 +54,7 @@ class CatBoostWorker(Worker):
         # self.test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=1024, shuffle=False)
 
 
-    def compute(self, config, search_run=True, budget=None, working_directory=None, *args, **kwargs):
+    def compute(self, config, search_run=True, iterations = None, budget=None, working_directory=None, *args, **kwargs):
         """
         Simple example for a compute function using a feed forward network.
         It is trained on the MNIST dataset.
@@ -103,7 +103,7 @@ class CatBoostWorker(Worker):
             'iterations': 1000,
             'learning_rate': config['lr'],
             'eval_metric': metrics.MCC(),
-            'random_seed': 42,
+            'random_seed': self.random_state,
             'logging_level': 'Silent',
             'use_best_model': True,
             'od_type': 'Iter',  # https://catboost.ai/en/docs/features/overfitting-detector-desc#od_wait
@@ -113,6 +113,12 @@ class CatBoostWorker(Worker):
             'l2_leaf_reg': config['l2_leaf_reg'],
             'depth': config['depth']
         }
+        if iterations:
+            params["use_best_model"] = False
+            params["iterations"] = iterations
+            del params["od_type"]
+            del params["od_wait"]
+            # maybe it is also necessary to set od_type and od_wait
 
         # validate_pool
         model = CatBoostClassifier(**params)    # balanced
@@ -123,6 +129,7 @@ class CatBoostWorker(Worker):
         MCC_test= matthews_corrcoef(y_test, y_pred)
 
         metricsdict = {"MCC_test": MCC_test,
+                    'iterations': model.tree_count_,
                     'cols': used_retp_col,
                     'F1_test': f1_score(y_test, y_pred),
                     'Recall_test': recall_score(y_test, y_pred),
@@ -140,7 +147,8 @@ class CatBoostWorker(Worker):
             return ({
                     'loss': 1-MCC_test, # remember: HpBandSter always minimizes!
                     'info': 
-                    {'F1_test': f1_score(y_test, y_pred),
+                    {'iterations': model.tree_count_,
+                    'F1_test': f1_score(y_test, y_pred),
                     'Recall_test': recall_score(y_test, y_pred),
                     'Prec_test': precision_score(y_test, y_pred),
                     'MCC_test_multiarts': matthews_corrcoef(y_test_multi, y_pred_multi),
@@ -174,7 +182,7 @@ class CatBoostWorker(Worker):
             Beside float-hyperparameters on a log scale, it is also able to handle categorical input parameter.
             :return: ConfigurationsSpace-Object
             """
-            cs = CS.ConfigurationSpace()
+            cs = CS.ConfigurationSpace(seed=parameters["random_state"])
             ret_p_hyperparams = parameters["ret_p_hyperparams"]
             N_min = ret_p_hyperparams["N_min"]
             weights = ret_p_hyperparams["weights"]
@@ -243,6 +251,7 @@ class CatBoostWorker(Worker):
 #     return args
 
 def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
+    np.random.seed(parameters["random_state"])
     logging.basicConfig(level=logging.DEBUG)
     log = logging.getLogger(__name__)
     # use test-validation set
@@ -324,6 +333,8 @@ def test_params(data, resultdict, parameters):
     for experiment in resultdict.keys():
         results = resultdict[experiment]
         config = results["id2config"][results["incumbent"]]["config"]
+        res = results["res"]
+        iterations = res.get_runs_by_id(res.get_incumbent_id())[-1]["info"]["iterations"] # get optimal iterations
         if experiment == "BetaLoo2D":
             n_min = config['n_min']
             max_basket = config['max_basket']
@@ -336,9 +347,14 @@ def test_params(data, resultdict, parameters):
             used_retp_col = ["itemID"]
         worker = CatBoostWorker(run_id=experiment, data=data,cat_cols=cat_cols,
             cont_cols=cont_cols, retp_cols=used_retp_col, output_col=outpu_col, experiment=experiment)
-        [model, metricsdict] = worker.compute(config, search_run=False)
+        [model, metricsdict] = worker.compute(config, search_run=False, iterations=iterations)
+        print(metricsdict)
         for key in parameters["metrics"]:
-            best_metrics[experiment + "_" + key] = metricsdict[key]
+            if key in metricsdict.keys():
+                best_metrics[experiment + "_" + key] = metricsdict[key]
         best_models[experiment] = model
 
     return [best_metrics, best_models]
+
+def test_metrics(inputdict):
+    return inputdict

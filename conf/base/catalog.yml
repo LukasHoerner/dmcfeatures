@@ -53,13 +53,25 @@ models_catboost:
   type: pickle.PickleDataSet
   filepath: data/06_models/models_catboost.p
 
-resultdict:
+models_pytorch:
+  type: pickle.PickleDataSet
+  filepath: data/06_models/models_pytorch.p
+
+resultdict: # for catboost
   type: pickle.PickleDataSet
   filepath: data/07_model_output/resultdict.p
+
+resultdict_pytorch: # aka resultdict
+  type: pickle.PickleDataSet
+  filepath: data/07_model_output/results_pytorch.p
   
 results_cols:
   type: pickle.PickleDataSet
   filepath: data/07_model_output/results_cols.p
+
+# met_dict_catboost:
+#   type: pickle.PickleDataSet
+#   filepath: data/07_model_output/met_dict_catboost.p
 
 metrics_catboost:
   type: tracking.MetricsDataSet
