@@ -22,6 +22,13 @@ def combine_dfs(orders_train, orders_test, orders_test_y):
 
 
 def generate_date_features(orders):
+    """_summary_
+
+    :param orders: _description_
+    :type orders: _type_
+    :return: _description_
+    :rtype: _type_
+    """
     # correct typo
     orders.loc[orders[orders["dateOfBirth"]=="1655-04-19"].index, "dateOfBirth"]= "1955-04-19"
     # convert to daytime
@@ -81,7 +88,12 @@ def generate_date_features(orders):
 
 
 def generate_other_features(orders):
-    """based on train dataset
+    """generate features only based on train dataset
+
+    :param orders: _description_
+    :type orders: _type_
+    :return: _description_
+    :rtype: _type_
     """
     train = orders[orders["val_set"]==0]
     test = orders[orders["val_set"]==1]
@@ -108,6 +120,21 @@ def generate_other_features(orders):
 
 
 def target_encode(X, stats, prior_mean, N_min, y = None):
+    """ helper function for BetaLooE
+
+    :param X: _description_
+    :type X: _type_
+    :param stats: _description_
+    :type stats: _type_
+    :param prior_mean: _description_
+    :type prior_mean: _type_
+    :param N_min: _description_
+    :type N_min: _type_
+    :param y: _description_, defaults to None
+    :type y: _type_, optional
+    :return: _description_
+    :rtype: _type_
+    """
     values = pd.Series(index = X.index, dtype=float)
     for i, stats_partframe in enumerate(stats):
         if type(y) == pd.core.series.Series:
@@ -138,7 +165,7 @@ def target_encode(X, stats, prior_mean, N_min, y = None):
     return values
 
 
-class BayLOO():
+class BetaLooE():
     def __init__(self, N_min = 20):
         self.N_min = N_min
     def fit(self, data, targets):
@@ -177,7 +204,9 @@ class BayLOO():
         return values
 
 
-class BayLOO2d():
+class BetaLooE2d():
+    """class object betalooe encoder 
+    """
     def __init__(self, N_min = 20, variants=False):
         self.variants = variants
         self.N_min = N_min
@@ -365,7 +394,24 @@ class BayLOO2d():
         return self # [arts_posterior, arts_ij_posterior, meta_arts, sorting, prior_mean]
         
     def transform(self, data, meta_group, targets=None, weighted=True, basket_max=5, sorting_type="lift"):
-        """meta_arts as indexer, since arts_ij_posterior is an array"""            
+        """uses meta_arts as indexer, since arts_ij_posterior is an array
+
+        :param data: _description_
+        :type data: _type_
+        :param meta_group: _description_
+        :type meta_group: _type_
+        :param targets: _description_, defaults to None
+        :type targets: _type_, optional
+        :param weighted: _description_, defaults to True
+        :type weighted: bool, optional
+        :param basket_max: _description_, defaults to 5
+        :type basket_max: int, optional
+        :param sorting_type: _description_, defaults to "lift"
+        :type sorting_type: str, optional
+        :return: _description_
+        :rtype: _type_
+        """
+
         arts_posterior = self.arts_posterior
         arts_ij_posterior = self.arts_ij_posterior
         prior_mean = self.prior_mean
@@ -475,6 +521,15 @@ class BayLOO2d():
 
 
 def finalize_features(data, parameters: dict):
+    """_summary_
+
+    :param data: _description_
+    :type data: _type_
+    :param parameters: _description_
+    :type parameters: dict
+    :return: _description_
+    :rtype: _type_
+    """
     data[parameters['meta_col']] = data["customerID"].astype(str) + data["orderDate"].astype(str)
     target_col = parameters['target_col'] # y
     data_col = parameters['artnr_col'] # X (data)
@@ -509,13 +564,13 @@ def finalize_features(data, parameters: dict):
         enc_test = mEnc_rand.transform(test[data_col]).iloc[:, 0]
         enc_mE_smooth_dict[n_min] = pd.concat([enc_train, enc_test]).sort_index()
 
-        enc1d = BayLOO(n_min)
+        enc1d = BetaLooE(n_min)
         enc1d.fit(train[data_col], train[target_col])
         enc_train = enc1d.transform(train[data_col], train[target_col])
         enc_test = enc1d.transform(test[data_col])
         enc_1D_dict[n_min] = pd.concat([enc_train, enc_test])
         enc_1D_dict_base[n_min] = enc1d.transform(data[data_col])
-        enc2d = BayLOO2d(n_min, variants = True)
+        enc2d = BetaLooE2d(n_min, variants = True)
         enc2d.fit(train[data_col], train[target_col], train[meta_col])
         for maxbasket in basket_max:
             for weigthing in weights:
@@ -543,6 +598,15 @@ def finalize_features(data, parameters: dict):
 
 
 def generate_val_test_features(data, parameters):
+    """_summary_
+
+    :param data: _description_
+    :type data: _type_
+    :param parameters: _description_
+    :type parameters: _type_
+    :return: _description_
+    :rtype: _type_
+    """
     target_feats = {"train_val": {}, "train_test": {}}
     target_feats["train_test"]["other_feats"] = generate_other_features(data)
     [enc_cols, enc_frame] = finalize_features(data, parameters)
@@ -558,6 +622,17 @@ def generate_val_test_features(data, parameters):
 
 
 def subframes_budgets(train_arts, test_arts, budget:int):
+    """function to create budgets (to use for HpBandSTer) - not used in experiments
+
+    :param train_arts: _description_
+    :type train_arts: _type_
+    :param test_arts: _description_
+    :type test_arts: _type_
+    :param budget: _description_
+    :type budget: int
+    :return: _description_
+    :rtype: _type_
+    """
     # helper function to seperate dataset into budget amount of ~equally sized chunks. Seperated by articles
     budgets = list(range(1, budget+1))
     
@@ -578,6 +653,19 @@ def subframes_budgets(train_arts, test_arts, budget:int):
 
 
 def generate_feature_frame(orders, time_features, target_features, parameters): #other_features, enc_frame,
+    """generates dataframe for validation and train set
+
+    :param orders: _description_
+    :type orders: _type_
+    :param time_features: _description_
+    :type time_features: _type_
+    :param target_features: _description_
+    :type target_features: _type_
+    :param parameters: _description_
+    :type parameters: _type_
+    :return: _description_
+    :rtype: _type_
+    """
     sets = ['train_test', 'train_val']
     orders_features_sets = {}
     time_features = pd.DataFrame(time_features)
@@ -636,176 +724,3 @@ def generate_feature_frame(orders, time_features, target_features, parameters): 
         orders_features_sets[subset] = orders_features
 
     return orders_features_sets
-
-
-# def generate_ret_p(data, parameters):
-#     data["basketID"] = data["customerID"].astype(str) + data["orderDate"].astype(str)
-#     target_col = parameters['target_col'] # y
-#     ordnr_col = parameters['ordnr_col'] # indicator
-#     artnr_col = parameters['artnr_col'] # X (data)
-    
-#     hyperparams = parameters['ret_p_hyperparams']
-#     min_n_arts = hyperparams["min_joint_baskets"]
-#     top_fs = hyperparams["top_freq_arts"]
-#     weights = hyperparams["weights"]
-#     drop_double_rets = hyperparams["drop_double_returns"]
-    
-#     pd.options.mode.chained_assignment = None
-#     # feature generation: cut predictions before 
-#     df = data[data["val_set"]==0]
-#     test_df = data[data["val_set"]==1]
-    
-#     # fit
-#     # mean_ret_op = data[parameters['return_type']].mean()
-#     multi_arts = df[df[ordnr_col].duplicated(keep=False)]
-#     multi_arts = multi_arts[[artnr_col, ordnr_col, target_col]]
-
-#     ret_arts = multi_arts[multi_arts[target_col]==1][artnr_col].unique()
-#     print("Bestellungen in Multi-Art-Warenkörben: ", multi_arts.shape[0], " von ", df.shape[0])
-#     print("Number of in Multi-Arts-Baskets that got returned ", multi_arts[artnr_col].isin(ret_arts).sum())
-    
-#     ret_arts_frame = multi_arts[multi_arts[artnr_col].isin(ret_arts)]
-#     lookup_ret_perc_art = ret_arts_frame.groupby(artnr_col)[target_col].mean().to_dict()
-
-#     lookup_tot_ord = multi_arts.groupby(artnr_col).size()
-#     n_transactions = multi_arts.shape[0]
-#     lookup_rel_ord = (lookup_tot_ord/n_transactions).to_dict()
-    
-#     # generate empty nested dicts for every combination
-#     lookup_lift_arts = {key: {} for key in min_n_arts}
-#     lookup_basket_occ = {key: {} for key in min_n_arts}
-#     lookup_basket_ret_p = {key: {} for key in min_n_arts}
-#     lookup_droped_ret_arts = {key: [] for key in min_n_arts}
-#     for article in ret_arts:
-#         art_df = multi_arts[multi_arts[artnr_col]==article][[ordnr_col, target_col]]
-#         ret_orders = art_df[art_df[target_col]>=1].drop_duplicates()[ordnr_col]  # drop duplicates to count double-returns: otherwise
-#         # all articles which were ordered with article; keep own article for color combinations etc.
-#         basket_df = multi_arts[multi_arts[ordnr_col].isin(art_df[ordnr_col])]  # [(multi_arts[ordnr_col].isin(art_df[ordnr_col])) & (multi_arts[artnr_col] != article)]
-#         if drop_double_rets:   # ignores probability if both articles got returned
-#             basket_df = basket_df.drop(basket_df[basket_df[target_col]==1].index)
-#         else:
-#             basket_df.loc[:, target_col] = 0   # set all target_cols to 0
-#         ret_incides = basket_df[basket_df[ordnr_col].isin(ret_orders)].index
-#         basket_df.loc[ret_incides, target_col] = 1 # set target_col = 1: indicating article got returned in basket
-#         # for orders with same article: ret_orders.index = index of origin article, where it got returned
-#         basket_df = basket_df.drop(ret_orders.index)    # drop the returned article of every order 
-#         basket_grouped = basket_df.groupby(artnr_col).size()
-        
-#         # for every min_joint_baseket combination
-#         for n_arts in min_n_arts:
-#             arts_basket_occ = basket_grouped[basket_grouped>=n_arts]   # only add arts with sufficient occurances
-#             if arts_basket_occ.shape[0] > 0:
-#                 lookup_basket_occ[n_arts][article] = arts_basket_occ   # .to_dict() # minimum of co-occurances
-#                 lookup_basket_ret_p[n_arts][article] = basket_df[basket_df[artnr_col].isin(arts_basket_occ.keys())].groupby(
-#                     artnr_col)[target_col].mean()  #.to_dict()
-#                 lookup_lift_arts[n_arts][article] = arts_basket_occ.index.to_series().apply(lambda x: (arts_basket_occ.loc[x]/n_transactions)/
-#                                       (lookup_rel_ord[article]*lookup_rel_ord[x]))
-#             else:
-#                 lookup_droped_ret_arts[n_arts] += [article]
-    
-#     used_cols = [artnr_col, ordnr_col, target_col]
-#     arts_used_ret_p = {}
-#     arts_ret_p = {}
-#     for n_arts in min_n_arts:
-#         for top_f in top_fs:
-#             for weight in weights:
-#                 colname = "min_"+str(n_arts)+"_top_"+str(top_f)+ "_"+str(weight) + "_"
-#                 data[colname+"_lift"] = np.nan
-#                 data[colname+"_conf"] = np.nan
-#                 # create df for test and train data
-#                 subframe_train = df[df[artnr_col].isin(lookup_basket_ret_p[n_arts].keys()) & # article got returned (+ has at least min_joint_basket occurances)
-#                         (df[ordnr_col].duplicated(keep=False))][used_cols]    # includes target_col for train_data to regularize own influence
-#                 subframe_test = test_df[test_df[artnr_col].isin(lookup_basket_ret_p[n_arts].keys()) & # article got returned (+ has at least min_joint_basket occurances)
-#                         (test_df[ordnr_col].duplicated(keep=False))][[artnr_col, ordnr_col]]
-                
-#                 # apply function for lift and confidence to training data
-#                 ret_pcts_conf_train = subframe_train.apply(lambda x: get_ret_perc_train(
-#                     x[1], x[2], df[used_cols], lookup_basket_ret_p[n_arts][(x[0])], x.name, lookup_basket_occ[n_arts][(x[0])],
-#                     lookup_basket_occ[n_arts][(x[0])], top_f, weight), axis=1, result_type='expand')
-#                 ret_pcts_lift_train = subframe_train.apply(lambda x: get_ret_perc_train(
-#                     x[1], x[2], df[used_cols], lookup_basket_ret_p[n_arts][(x[0])], x.name, lookup_basket_occ[n_arts][(x[0])],
-#                     lookup_lift_arts[n_arts][(x[0])], top_f, weight), axis=1, result_type='expand')
-
-#                 # apply function for lift and confidence to test data
-#                 ret_pcts_conf_test = subframe_test.apply(lambda x: get_ret_perc_test(
-#                     x[1], test_df[used_cols], lookup_basket_ret_p[n_arts][(x[0])], x.name, lookup_basket_occ[n_arts][(x[0])],
-#                     lookup_basket_occ[n_arts][(x[0])], top_f, weight), axis=1, result_type='expand')
-#                 ret_pcts_lift_test = subframe_test.apply(lambda x: get_ret_perc_test(
-#                     x[1], test_df[used_cols], lookup_basket_ret_p[n_arts][(x[0])], x.name, lookup_basket_occ[n_arts][(x[0])],
-#                     lookup_lift_arts[n_arts][(x[0])], top_f, weight), axis=1, result_type='expand')
-#                 print(ret_pcts_lift_train.iloc[:, 0].head(), ret_pcts_conf_train.iloc[:, 0].head())
-                
-#                 arts_used_ret_p[colname+"lift"] = pd.concat([ret_pcts_lift_train.iloc[:, 1],
-#                                                              ret_pcts_lift_test.iloc[:, 1]])
-#                 arts_used_ret_p[colname+"conf"] = pd.concat([ret_pcts_conf_train.iloc[:, 1],
-#                                                               ret_pcts_conf_test.iloc[:, 1]])
-                
-#                 arts_ret_p[colname+"lift"] = pd.concat([ret_pcts_lift_train.iloc[:, 0],
-#                                                              ret_pcts_lift_test.iloc[:, 0]])
-#                 arts_ret_p[colname+"conf"] = pd.concat([ret_pcts_conf_train.iloc[:, 0],
-#                                                               ret_pcts_conf_test.iloc[:, 0]])
-#         print(colname, "subframe_train:", subframe_train.shape[0], " subframe_test:", subframe_test.shape[0])
-                
-#     return [arts_ret_p, lookup_basket_occ, lookup_basket_ret_p, lookup_ret_perc_art, 
-#             lookup_tot_ord, lookup_lift_arts, lookup_droped_ret_arts, arts_used_ret_p]
-
-# def get_ret_perc_train(bestnr, ret_ind, data, ret_p_art, own_index, occ_arts, sort_arts, top_f, weights):
-#     # sort arts: use df with lift if lift, else no_occurances
-#     # function init: pick all articles from basket 
-#     basket_arts = data[(data.iloc[:, 1] == bestnr) &    # iloc[:,1] = Column orderID -> same order arts
-#              (data.iloc[:, 0].isin(ret_p_art.index))].iloc[:, 0]     # iloc[:,0] = Column article -> has entry in ret_p_art
-#     cleaned_basket_arts = basket_arts.drop(own_index, errors="ignore").drop_duplicates()
-#     if len(cleaned_basket_arts)==0:
-#         return np.nan, 0
-#     else: 
-#         # sorting specified by series in input (from lookup_lift_arts or lookup_basket_occ)
-#         sorted_arts = sort_arts.loc[cleaned_basket_arts].sort_values().index.to_series()
-
-#         if top_f:
-#             if type(top_f) == str: # for values like var_5 -> variable 5 or if len(arts)>5 -> take half of the most frq
-#                 n_min = [int(s) for s in top_f if s.isdigit()][0]
-#                 top_f = max(n_min, round(len(sorted_arts)/2))
-#             sorted_arts = sorted_arts.iloc[-top_f:]
-
-#         # adapt for training data (fix ret_p) to prevent overfitting
-#         ret_p_basket = ret_p_art.loc[sorted_arts]
-#         occ_basket = occ_arts.loc[sorted_arts]
-#         ret_p_basket = (ret_p_basket*occ_basket-ret_ind   # numerator = no returns of article
-#                                 )/(occ_basket-1)  # denominator = current order
-
-#         if weights: # if no weigths: only use mean of pcts
-#             weight = range(1, sorted_arts.shape[0]+1)
-#             if weights == "sqrt_w":
-#                 weight = np.sqrt(weight)
-#             ret_pcts = (ret_p_basket*weight).sum()/sum(weight)
-#         else:
-#             ret_pcts = ret_p_basket.mean()
-
-#         return ret_pcts, occ_basket.sum()
-
-# def get_ret_perc_test(bestnr, data, ret_p_art, own_index, occ_arts, sort_arts, top_f, weights):
-#     # function init: pick all articles from basket 
-#     basket_arts = data[(data.iloc[:, 1] == bestnr) &    # iloc[:,1] = Column ordernr
-#              (data.iloc[:, 0].isin(ret_p_art.index))].iloc[:, 0]     # iloc[:,0] = Column article
-#     cleaned_basket_arts = basket_arts.drop(own_index, errors="ignore").drop_duplicates()
-#     if len(cleaned_basket_arts)==0:
-#         return np.nan, 0
-#     else:
-#         # sorting specified by series in input (from lookup_lift_arts or lookup_basket_occ)
-#         sorted_arts = sort_arts.loc[cleaned_basket_arts].sort_values().index.to_series()
-
-#         if top_f:
-#             if type(top_f) == str: # for values like var_5 -> variable 5 or if len(arts)>5 -> take half of the most frq
-#                 n_min = [int(s) for s in top_f if s.isdigit()][0]
-#                 top_f = max(n_min, round(len(sorted_arts)/2))
-#             sorted_arts = sorted_arts.iloc[-top_f:]
-
-#         if weights: # if no weigths: only use mean of pcts
-#             weight = range(1, sorted_arts.shape[0]+1)
-#             if weights == "sqrt_w": # middle parth for sorting importance-wise
-#                 weight = np.sqrt(weight)
-#             ret_pcts = (ret_p_art.loc[sorted_arts]*weight).sum()/sum(weight)
-#         else:
-#             ret_pcts = ret_p_art.loc[sorted_arts].mean()
-
-#         return ret_pcts, occ_arts.loc[sorted_arts].sum()

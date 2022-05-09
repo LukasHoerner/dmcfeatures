@@ -62,7 +62,7 @@ class CatBoostWorker(Worker):
         """
         log =self.logger
         cat_features=self.categorical_features_indices
-        if self.experiment == "baseline":
+        if self.experiment == "catboost_enc":
             cat_features = np.append(cat_features, len(cat_features))
             used_retp_col = "itemID"
             X_train = self.train[[used_retp_col] + self.cat_cols+self.cont_cols]
@@ -265,7 +265,7 @@ def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
     bohb_args = parameters["bohb_catboost"]
     resultdict = {}
 
-    experiments = {"baseline": [parameters["artnr_col"]],
+    experiments = {"catboost_enc": [parameters["artnr_col"]],
                     "mEstimate": enc_cols["m"] + enc_cols["m_smooth"],
                     "BetaLoo2D": enc_cols["2D"]}
 

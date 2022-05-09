@@ -28,7 +28,7 @@ def seed_worker(worker_id):
 
 class TabularDataset(Dataset):
     def __init__(self, X, y, cat_feat=[], cont_feat=[]):
-        """
+        """ adapted from
         # https://yashuseth.blog/2018/07/22/pytorch-neural-network-for-tabular-data-with-categorical-embeddings/
         Characterizes a Dataset for PyTorch
         Parameters
@@ -70,6 +70,11 @@ class TabularDataset(Dataset):
 
 
 class PyTorchWorker(Worker):
+    """_summary_
+
+    :param Worker: _description_
+    :type Worker: _type_
+    """
     def __init__(self, data, parameters, retp_cols, output_col, experiment, **kwargs):
         super().__init__(**kwargs)
         ret_p_hyperparams = parameters["ret_p_hyperparams"]
@@ -109,17 +114,6 @@ class PyTorchWorker(Worker):
 
         self.categorical_features_indices = np.array(range(len(cat_cols)))
 
-       # enable opportunity to choose between oversampling and weights
-        # self.weights = None 
-        # if parameters["imbalance"]: # train-val-test set with 0 - 1 - 2 in val_set column
-        #     oversamp_inc = round((1 - (3-data["val_set"].max())*parameters["val_test_pct"])/(parameters["val_test_pct"]) * data[data["val_set"]==data["val_set"].max()].shape[0])
-        #     self.oversamp_inc = oversamp_inc
-        #     weights = pd.Series(1, index=range(train.shape[0]))
-        #     weights.loc[train[train[output_col]==1].index] = 1/train.loc[:oversamp_inc, output_col].mean()
-        #     weights = weights.loc[:oversamp_inc]
-        #     self.weights = weights.to_list()
-        #     print(oversamp_inc)
-
         # batch_size = 128
         # self.cat_cols = cat_cols # for embeddings; day_of_week + month as embedding
         # self.cot_cols = cot_cols
@@ -131,9 +125,7 @@ class PyTorchWorker(Worker):
         # y_train = data[data['val_set']== 0][output_col].to_numpy()
         # X_test = data[data['val_set']== 1][self.cat_cols + self.cot_cols].to_numpy()
         # y_test = data[data['val_set']== 1][output_col].to_numpy()
-        
-
-        # dataloader = DataLoader(train_dataset, batchsize, shuffle=True) used the code from example
+        # dataloader = DataLoader(train_dataset, batchsize, shuffle=True) used the code from example        
 
     def compute(self, config, budget,search_run=True, working_directory=None,  *args, **kwargs):
         """
@@ -150,7 +142,7 @@ class PyTorchWorker(Worker):
         log=self.logger
         cat_inc=self.categorical_features_indices
 
-        if self.experiment == "baseline":
+        if self.experiment == "entity_embeddings":
             cat_inc = np.append(cat_inc, len(cat_inc))
             used_retp_col = [self.item_col]
             X_train = self.train[used_retp_col + self.cat_cols+self.cont_cols]
@@ -163,7 +155,7 @@ class PyTorchWorker(Worker):
                 weight = config['weight']
                 sort = config['sort']
                 used_retp_col = [str(str(n_min) + "_" + str(max_basket) + "_" + str(weight) + "_" + sort)]
-            elif self.experiment == "mEstimate":
+            elif self.experiment == "target_enc":
                 if config['smooth']:
                     used_retp_col = [str(self.N_min[config['m']-1]) + "_" + config['smooth']]
                 else:
@@ -216,11 +208,11 @@ class PyTorchWorker(Worker):
         valid_metrics = metrics.clone(prefix='val_') 
 
         prev_mcc = 0
-        best_epoch = 0
+        best_epoch = 1
         patience = self.patience
-        train_dict = {0: None}
+        train_dict = {1: None}
         # train model
-        for epoch in range(int(budget)): # 
+        for epoch in range(1, int(budget)+1): # 
             model.train()            
             loss = 0
             for i, (y, cont_x, cat_x) in enumerate(train_loader):
@@ -238,7 +230,7 @@ class PyTorchWorker(Worker):
                 valid_metrics(y_pred, y.type(torch.int8))
             epoch_val_metrics = valid_metrics.compute()
             epoch_train_metrics = train_metrics.compute()
-            print(epoch, loss.item(), epoch_train_metrics["train_MatthewsCorrCoef"], epoch_val_metrics)
+            # print(epoch, loss.item(), epoch_train_metrics["train_MatthewsCorrCoef"], epoch_val_metrics)
             if epoch_val_metrics["val_MatthewsCorrCoef"].item() > prev_mcc:
                 train_dict[epoch] = epoch_val_metrics
                 best_epoch = epoch
@@ -246,7 +238,7 @@ class PyTorchWorker(Worker):
                 patience = self.patience
             else:
                 patience -= 1
-                if epoch == 0:
+                if epoch == 1:
                     train_dict[epoch] = epoch_val_metrics
                 if patience == 0:
                     break
@@ -257,7 +249,7 @@ class PyTorchWorker(Worker):
             best_epoch = epoch
             train_dict[epoch] = epoch_val_metrics
             prev_mcc = epoch_val_metrics["val_MatthewsCorrCoef"]
-        metricsdict = {'mcc':prev_mcc,
+        metricsdict = {'MCC_test':prev_mcc,
                 'F1_test': train_dict[best_epoch]["val_F1Score"],
                 'Recall_test': train_dict[best_epoch]["val_Recall"],
                 'Prec_test': train_dict[best_epoch]["val_Precision"],
@@ -329,17 +321,12 @@ class PyTorchWorker(Worker):
                 weighting = CSH.CategoricalHyperparameter('weight',  weights, default_value=weights[0])
                 sorting = CSH.CategoricalHyperparameter('sort', sorting_type, default_value=sorting_type[0])
                 cs.add_hyperparameters([min_joint_baskets, max_metaitems, weighting, sorting])
-            elif experiment == "mEstimate":
+            elif experiment == "target_enc": # includes beta encoding ("" and "base")
                 m = CSH.UniformIntegerHyperparameter('m', lower=1, upper=len(N_min), default_value=2)
                 # m = CSH.CategoricalHyperparameter('m', N_min, default_value=N_min[1])
                 smooth = CSH.CategoricalHyperparameter('smooth', ["m", "m_smooth", "", "base"], default_value="m")
                 cs.add_hyperparameters([m, smooth])
-            # # add no hyperparams if using article
-            # if parameters["imbalance"] == True:
-            #     # 1 indicating weights, 0 oversampling
-            #     imbalance = CSH.UniformIntegerHyperparameter('weights', lower=0, upper=1, default_value=1)
-            #     # imbalance = CSH.CategoricalHyperparameter('imb', ["oversamp", "weights"], default_value="oversamp")
-            #     cs.add_hyperparameter(imbalance)
+
             return cs
 
 
@@ -484,8 +471,8 @@ def find_incumbent(data, parameters, enc_cols, host_nn='lo'):
     # output_col = parameters["ret_col"]
     bohb_args = parameters["bohb_pytorch"]
     resultdict = {}
-    experiments = {"baseline": [parameters["artnr_col"]],
-                    "mEstimate": enc_cols["m"] + enc_cols["m_smooth"] + enc_cols['1D'] + enc_cols['1D_base'],
+    experiments = {"entity_embeddings": [parameters["artnr_col"]],
+                    "target_enc": enc_cols["m"] + enc_cols["m_smooth"] + enc_cols['1D'] + enc_cols['1D_base'],
                     "BetaLoo2D": enc_cols["2D"]}
 
     for experiment in experiments.keys():
@@ -554,7 +541,7 @@ def test_params(data, resultdict, parameters):
             weight = config['weight']
             sort = config['sort']
             used_retp_col = [str(str(n_min) + "_" + str(max_basket) + "_" + str(weight) + "_" + sort)]
-        elif experiment == "mEstimate":
+        elif experiment == "target_enc":
             if config['smooth']:
                 used_retp_col = [str(ret_p_hyperparams["N_min"][config['m']-1]) + "_" + config['smooth']]
             else:

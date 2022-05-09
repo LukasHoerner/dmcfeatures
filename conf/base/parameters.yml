@@ -9,7 +9,7 @@ ret_p_hyperparams:
   sorting_type: ["lift", "conf"]
   basket_max: [1, 3, 5, 100]
 
-budgets: 10
+budgets: 10 # not used in experiments
 coldict:
   ord_encode: ["color", "size", "customerID", "salutation", "state", "itemID", "manufacturerID"] # "item_color_cat", "item_size_cat",
   # cat_passnoenc: ['weekdayOrdered', 'weekdayReceived', 'weDelivery', 'accOldSys', 'userAgeImp']
@@ -26,14 +26,16 @@ bohb_catboost:
   n_iterations: 5
   n_workers: 1
 
+# catboost
 metrics: ['MCC_test', 'F1_test', 'Recall_test', 'Prec_test', 'MCC_test_multiarts', 'Recall_test_multiarts', 'Prec_test_multiarts']
 
 bohb_pytorch:
   description: "bohb_pytorch"
   min_budget: 2
-  max_budget: 30
-  n_iterations: 1
+  max_budget: 40
+  n_iterations: 7
   n_workers: 1
+  min_n_workers: 1
 
 patience_torch: 3
-metrics_pytorch: ['MCC_test', 'F1_test', 'Recall_test', 'Prec_test', 'epoch']
+metrics_pytorch: ['MCC_test', 'F1_test', 'Recall_test', 'Prec_test']
