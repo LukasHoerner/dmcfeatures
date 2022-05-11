@@ -166,6 +166,8 @@ def target_encode(X, stats, prior_mean, N_min, y = None):
 
 
 class BetaLooE():
+    """Read Subchapter 3.2.1 Beta leave-one-out encoding for items for description
+    """
     def __init__(self, N_min = 20):
         self.N_min = N_min
     def fit(self, data, targets):
@@ -394,11 +396,14 @@ class BetaLooE2d():
         return self # [arts_posterior, arts_ij_posterior, meta_arts, sorting, prior_mean]
         
     def transform(self, data, meta_group, targets=None, weighted=True, basket_max=5, sorting_type="lift"):
-        """uses meta_arts as indexer, since arts_ij_posterior is an array
+        """Transforms items and generates features. Use targets=none for test set.
+        Read Subchapter 3.2.2 Beta leave-one-out encoding two dimensions for items and baskets
+             for descriptions of hyperparameters.
+        meta_arts as indexer, since arts_ij_posterior is an array
 
-        :param data: _description_
+        :param data: data to encode. E.g. item id
         :type data: _type_
-        :param meta_group: _description_
+        :param meta_group: grouper. E.g. shopping basket
         :type meta_group: _type_
         :param targets: _description_, defaults to None
         :type targets: _type_, optional
